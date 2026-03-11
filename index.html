@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Genera tu foto de perfil</title>
+  <style>
+    :root {
+      --bg: #111827;
+      --card: #1f2937;
+      --text: #f9fafb;
+      --muted: #d1d5db;
+      --accent: #dc2626;
+      --accent-dark: #991b1b;
+      --line: #374151;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, var(--bg), #0b1220);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 520px;
+      background: rgba(31, 41, 55, 0.96);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      text-align: center;
+    }
+
+    .sub {
+      margin: 0 0 18px;
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .preview-wrap {
+      background: #0f172a;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+    }
+
+    canvas {
+      width: 100%;
+      display: block;
+      border-radius: 16px;
+      background: #0b1220;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    canvas.dragging {
+      cursor: grabbing;
+    }
+
+    .hint {
+      margin-top: 10px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls {
+      display: grid;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .control {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .control label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    button, .file-label {
+      border: none;
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+
+    button:hover, .file-label:hover {
+      transform: translateY(-1px);
+      opacity: 0.96;
+    }
+
+    .primary {
+      background: linear-gradient(180deg, var(--accent), var(--accent-dark));
+      color: white;
+    }
+
+    .secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .steps {
+      margin-top: 18px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .status {
+      margin-top: 12px;
+      min-height: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #fecaca;
+    }
+
+    @media (max-width: 480px) {
+      .buttons {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <h1>Genera tu foto de perfil</h1>
+    <p class="sub">Sube tu foto, ajústala con tus dedos o con el mouse y descarga la imagen lista para poner en Facebook.</p>
+
+    <section class="preview-wrap">
+      <canvas id="canvas" width="1080" height="1080" aria-label="Vista previa"></canvas>
+      <div class="hint">Arrastra la foto para moverla. Usa el control para acercar o alejar.</div>
+    </section>
+
+    <section class="controls">
+      <div class="control">
+        <label for="zoom">Tamaño de la foto</label>
+        <input id="zoom" type="range" min="0.6" max="3" step="0.01" value="1" />
+      </div>
+    </section>
+
+    <div class="buttons">
+      <label for="upload" class="file-label primary">Subir mi foto</label>
+      <button id="downloadBtn" class="secondary" disabled>Descargar mi foto</button>
+      <button id="resetBtn" class="ghost" disabled>Reiniciar ajuste</button>
+    </div>
+
+    <input id="upload" type="file" accept="image/*" />
+
+    <div id="status" class="status"></div>
+
+    <div class="steps">
+      1. Toca <strong>Subir mi foto</strong>.<br />
+      2. Acomódala en la vista previa.<br />
+      3. Toca <strong>Descargar mi foto</strong>.<br />
+      4. Súbela como foto de perfil en Facebook.
+    </div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const uploadInput = document.getElementById('upload');
+    const zoomInput = document.getElementById('zoom');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const statusEl = document.getElementById('status');
+
+    const FRAME_SRC = 'marco.png';
+
+    const state = {
+      userImage: null,
+      frameImage: null,
+      scale: 1,
+      minScale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      baseWidth: 0,
+      baseHeight: 0,
+      dragging: false,
+      dragStartX: 0,
+      dragStartY: 0,
+      startOffsetX: 0,
+      startOffsetY: 0,
+    };
+
+    function setStatus(message) {
+      statusEl.textContent = message || '';
+    }
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#0b1220';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawPlaceholder() {
+      clearCanvas();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([18, 14]);
+      ctx.strokeRect(70, 70, canvas.width - 140, canvas.height - 140);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 46px Arial';
+      ctx.fillText('Sube tu foto aquí', canvas.width / 2, canvas.height / 2 - 10);
+      ctx.font = '30px Arial';
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.fillText('Luego acomódala y descárgala', canvas.width / 2, canvas.height / 2 + 44);
+      if (state.frameImage) {
+        ctx.drawImage(state.frameImage, 0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    function computeBaseSize(img) {
+      const canvasRatio = canvas.width / canvas.height;
+      const imgRatio = img.width / img.height;
+
+      if (imgRatio > canvasRatio) {
+        state.baseHeight = canvas.height;
+        state.baseWidth = state.baseHeight * imgRatio;
+      } else {
+        state.baseWidth = canvas.width;
+        state.baseHeight = state.baseWidth / imgRatio;
+      }
+    }
+
+    function resetImagePlacement() {
+      if (!state.userImage) return;
+      computeBaseSize(state.userImage);
+      state.scale = 1;
+      state.minScale = 1;
+      state.offsetX = (canvas.width - state.baseWidth) / 2;
+      state.offsetY = (canvas.height - state.baseHeight) / 2;
+      zoomInput.value = '1';
+      draw();
+    }
+
+    function draw() {
+      clearCanvas();
+
+      if (state.userImage) {
+        const width = state.baseWidth * state.scale;
+        const height = state.baseHeight * state.scale;
+        ctx.drawImage(state.userImage, state.offsetX, state.offsetY, width, height);
+      }
+
+      if (state.frameImage) {
+        ctx.drawImage(state.frameImage, 0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    function loadFrame() {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('No se pudo cargar marco.png'));
+        img.src = FRAME_SRC;
+      });
+    }
+
+    function clampOffsets() {
+      if (!state.userImage) return;
+
+      const width = state.baseWidth * state.scale;
+      const height = state.baseHeight * state.scale;
+
+      const minX = Math.min(0, canvas.width - width);
+      const maxX = Math.max(0, canvas.width - width);
+      const minY = Math.min(0, canvas.height - height);
+      const maxY = Math.max(0, canvas.height - height);
+
+      state.offsetX = Math.min(Math.max(state.offsetX, minX), maxX);
+      state.offsetY = Math.min(Math.max(state.offsetY, minY), maxY);
+    }
+
+    function getPoint(event) {
+      if (event.touches && event.touches[0]) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: event.touches[0].clientX - rect.left,
+          y: event.touches[0].clientY - rect.top,
+        };
+      }
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+    }
+
+    function startDrag(event) {
+      if (!state.userImage) return;
+      state.dragging = true;
+      canvas.classList.add('dragging');
+      const point = getPoint(event);
+      state.dragStartX = point.x;
+      state.dragStartY = point.y;
+      state.startOffsetX = state.offsetX;
+      state.startOffsetY = state.offsetY;
+    }
+
+    function moveDrag(event) {
+      if (!state.dragging || !state.userImage) return;
+      event.preventDefault();
+      const point = getPoint(event);
+      state.offsetX = state.startOffsetX + (point.x - state.dragStartX) * (canvas.width / canvas.clientWidth);
+      state.offsetY = state.startOffsetY + (point.y - state.dragStartY) * (canvas.height / canvas.clientHeight);
+      clampOffsets();
+      draw();
+    }
+
+    function endDrag() {
+      state.dragging = false;
+      canvas.classList.remove('dragging');
+    }
+
+    uploadInput.addEventListener('change', (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      setStatus('');
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          state.userImage = img;
+          resetImagePlacement();
+          downloadBtn.disabled = false;
+          resetBtn.disabled = false;
+        };
+        img.onerror = () => {
+          setStatus('No se pudo abrir la imagen. Prueba con otra foto.');
+        };
+        img.src = reader.result;
+      };
+      reader.onerror = () => setStatus('No se pudo leer la foto seleccionada.');
+      reader.readAsDataURL(file);
+    });
+
+    zoomInput.addEventListener('input', () => {
+      if (!state.userImage) return;
+
+      const previousScale = state.scale;
+      const nextScale = Number(zoomInput.value);
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+
+      const widthBefore = state.baseWidth * previousScale;
+      const heightBefore = state.baseHeight * previousScale;
+      const relativeX = (centerX - state.offsetX) / widthBefore;
+      const relativeY = (centerY - state.offsetY) / heightBefore;
+
+      state.scale = Math.max(state.minScale, nextScale);
+
+      const widthAfter = state.baseWidth * state.scale;
+      const heightAfter = state.baseHeight * state.scale;
+      state.offsetX = centerX - relativeX * widthAfter;
+      state.offsetY = centerY - relativeY * heightAfter;
+
+      clampOffsets();
+      draw();
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (!state.userImage) {
+        setStatus('Primero sube tu foto.');
+        return;
+      }
+      const link = document.createElement('a');
+      link.download = 'mi-foto-con-marco.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      if (!state.userImage) return;
+      resetImagePlacement();
+    });
+
+    canvas.addEventListener('mousedown', startDrag);
+    window.addEventListener('mousemove', moveDrag);
+    window.addEventListener('mouseup', endDrag);
+    canvas.addEventListener('touchstart', startDrag, { passive: true });
+    canvas.addEventListener('touchmove', moveDrag, { passive: false });
+    canvas.addEventListener('touchend', endDrag);
+
+    window.addEventListener('resize', () => {
+      if (state.userImage) draw();
+    });
+
+    async function init() {
+      try {
+        state.frameImage = await loadFrame();
+        drawPlaceholder();
+      } catch (error) {
+        clearCanvas();
+        setStatus('No encontré el archivo marco.png. Colócalo en la misma carpeta que este index.html.');
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
