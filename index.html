@@ -104,6 +104,34 @@
       width: 100%;
     }
 
+    .frame-selector {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .frame-option {
+      width: 80px;
+      height: 80px;
+      border-radius: 12px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      object-fit: cover;
+      flex: 0 0 auto;
+      background: #111827;
+      transition: transform 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+    }
+
+    .frame-option:hover {
+      transform: translateY(-1px);
+      opacity: 0.96;
+    }
+
+    .frame-option.active {
+      border-color: #dc2626;
+    }
+
     .buttons {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -188,6 +216,15 @@
         <label for="zoom">Tamaño de la foto</label>
         <input id="zoom" type="range" min="0.6" max="3" step="0.01" value="1" />
       </div>
+
+      <div class="control">
+        <label>Elige un marco</label>
+        <div id="frameSelector" class="frame-selector">
+          <img src="marco.png" class="frame-option active" data-index="0" alt="Marco 1" />
+          <img src="marco2.png" class="frame-option" data-index="1" alt="Marco 2" />
+          <img src="marco3.png" class="frame-option" data-index="2" alt="Marco 3" />
+        </div>
+      </div>
     </section>
 
     <div class="buttons">
@@ -202,9 +239,10 @@
 
     <div class="steps">
       1. Toca <strong>Subir mi foto</strong>.<br />
-      2. Acomódala en la vista previa.<br />
-      3. Toca <strong>Descargar mi foto</strong>.<br />
-      4. Súbela como foto de perfil en Facebook.
+      2. Escoge el marco que más te guste.<br />
+      3. Acomódala en la vista previa.<br />
+      4. Toca <strong>Descargar mi foto</strong>.<br />
+      5. Súbela como foto de perfil en Facebook.
     </div>
   </main>
 
@@ -216,12 +254,18 @@
     const downloadBtn = document.getElementById('downloadBtn');
     const resetBtn = document.getElementById('resetBtn');
     const statusEl = document.getElementById('status');
+    const frameOptions = document.querySelectorAll('.frame-option');
 
-    const FRAME_SRC = 'marco.png';
+    const FRAMES = [
+      'marco.png',
+      'marco2.png',
+      'marco3.png'
+    ];
 
     const state = {
       userImage: null,
       frameImage: null,
+      frameIndex: 0,
       scale: 1,
       minScale: 1,
       offsetX: 0,
@@ -259,6 +303,7 @@
       ctx.font = '30px Arial';
       ctx.fillStyle = 'rgba(255,255,255,0.65)';
       ctx.fillText('Luego acomódala y descárgala', canvas.width / 2, canvas.height / 2 + 44);
+
       if (state.frameImage) {
         ctx.drawImage(state.frameImage, 0, 0, canvas.width, canvas.height);
       }
@@ -302,12 +347,12 @@
       }
     }
 
-    function loadFrame() {
+    function loadFrame(index = 0) {
       return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('No se pudo cargar marco.png'));
-        img.src = FRAME_SRC;
+        img.onerror = () => reject(new Error(`No se pudo cargar ${FRAMES[index]}`));
+        img.src = FRAMES[index];
       });
     }
 
@@ -327,14 +372,15 @@
     }
 
     function getPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+
       if (event.touches && event.touches[0]) {
-        const rect = canvas.getBoundingClientRect();
         return {
           x: event.touches[0].clientX - rect.left,
           y: event.touches[0].clientY - rect.top,
         };
       }
-      const rect = canvas.getBoundingClientRect();
+
       return {
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
@@ -343,8 +389,10 @@
 
     function startDrag(event) {
       if (!state.userImage) return;
+
       state.dragging = true;
       canvas.classList.add('dragging');
+
       const point = getPoint(event);
       state.dragStartX = point.x;
       state.dragStartY = point.y;
@@ -354,10 +402,13 @@
 
     function moveDrag(event) {
       if (!state.dragging || !state.userImage) return;
+
       event.preventDefault();
+
       const point = getPoint(event);
       state.offsetX = state.startOffsetX + (point.x - state.dragStartX) * (canvas.width / canvas.clientWidth);
       state.offsetY = state.startOffsetY + (point.y - state.dragStartY) * (canvas.height / canvas.clientHeight);
+
       clampOffsets();
       draw();
     }
@@ -374,20 +425,28 @@
       setStatus('');
 
       const reader = new FileReader();
+
       reader.onload = () => {
         const img = new Image();
+
         img.onload = () => {
           state.userImage = img;
           resetImagePlacement();
           downloadBtn.disabled = false;
           resetBtn.disabled = false;
         };
+
         img.onerror = () => {
           setStatus('No se pudo abrir la imagen. Prueba con otra foto.');
         };
+
         img.src = reader.result;
       };
-      reader.onerror = () => setStatus('No se pudo leer la foto seleccionada.');
+
+      reader.onerror = () => {
+        setStatus('No se pudo leer la foto seleccionada.');
+      };
+
       reader.readAsDataURL(file);
     });
 
@@ -420,6 +479,7 @@
         setStatus('Primero sube tu foto.');
         return;
       }
+
       const link = document.createElement('a');
       link.download = 'mi-foto-con-marco.png';
       link.href = canvas.toDataURL('image/png');
@@ -431,24 +491,52 @@
       resetImagePlacement();
     });
 
+    frameOptions.forEach((option) => {
+      option.addEventListener('click', async () => {
+        try {
+          const index = Number(option.dataset.index);
+
+          setStatus('');
+          state.frameIndex = index;
+          state.frameImage = await loadFrame(index);
+
+          frameOptions.forEach((item) => item.classList.remove('active'));
+          option.classList.add('active');
+
+          if (state.userImage) {
+            draw();
+          } else {
+            drawPlaceholder();
+          }
+        } catch (error) {
+          setStatus('No se pudo cargar el marco seleccionado.');
+        }
+      });
+    });
+
     canvas.addEventListener('mousedown', startDrag);
     window.addEventListener('mousemove', moveDrag);
     window.addEventListener('mouseup', endDrag);
+
     canvas.addEventListener('touchstart', startDrag, { passive: true });
     canvas.addEventListener('touchmove', moveDrag, { passive: false });
     canvas.addEventListener('touchend', endDrag);
 
     window.addEventListener('resize', () => {
-      if (state.userImage) draw();
+      if (state.userImage) {
+        draw();
+      } else {
+        drawPlaceholder();
+      }
     });
 
     async function init() {
       try {
-        state.frameImage = await loadFrame();
+        state.frameImage = await loadFrame(state.frameIndex);
         drawPlaceholder();
       } catch (error) {
         clearCanvas();
-        setStatus('No encontré el archivo marco.png. Colócalo en la misma carpeta que este index.html.');
+        setStatus('No encontré los archivos de los marcos. Colócalos en la misma carpeta que este index.html.');
       }
     }
 
